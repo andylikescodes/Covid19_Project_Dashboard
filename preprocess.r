@@ -2,26 +2,60 @@ library(readxl)
 library(tidyverse)
 library(Dict)
 
-# Read in Data
+## Read in Data -----------------------------------
+dat = tibble(read.csv('Wave1-8_A-E.csv'))
 request_lookup = read_excel('Combined_Request_Lookup.xlsx', skip=1)
-dict_tracking = read_excel('COVID_Data_Dictionaries_tracking.xlsx')
 data_dictionary = read_excel('Combined_Data_Dictionary.xlsx', skip=1)
 
-labels <- unlist(unique(dict_tracking['Descriptive_Label']))
-labels <- labels[-c(41,40,39)]
-tracking <- unlist(unique(dict_tracking['Request_Label']))
-dict_measures <- unique(data_dictionary$Measure)
-measures <- intersect(tracking, dict_measures)
+# Processing data dictionary tracking
+dict_tracking = read_excel('COVID_Data_Dictionaries_tracking.xlsx')
+dict_tracking = dplyr::rename(dict_tracking, Descriptive_label = ...1)
+dict_tracking = dict_tracking[!is.na(dict_tracking$Request_Label),]
 
+dummy_waves <- colnames(data_dictionary %>% select(8:22))
+
+## Main preprocessing step:
+# Get unique_request_labels
+response_rows= request_lookup[(request_lookup$Scores==0) & (request_lookup$DataType=='integer'),]
+measures = unique(response_rows$Request_Label)
+demographics = measures[startsWith(measures, 'Dem')]
+measures = measures[!startsWith(measures, 'Dem')]
+
+# Generate select categories
+cats = character()
+for (mea in measures){
+  cats = c(cats, get_descriptive_labels(dict_tracking, mea))
+}
+
+# Get descriptive labels
+get_descriptive_labels <- function(dict_tracking, label){
+  tmp = dict_tracking[dict_tracking$Request_Label==label, 'Descriptive_label']
+  shape = dim(tmp)
+  if (shape[1] == 0) {
+    return(label)
+  } else {
+    return(pull(tmp))
+  }
+}
+
+# Remove outlier for age:
+remove_outliers <- function(x, na.rm = TRUE, ...) {
+  qnt <- quantile(x, probs=c(.25, .75), na.rm = na.rm, ...)
+  H <- 1.5 * IQR(x, na.rm = na.rm)
+  y <- x
+  y[x < (qnt[1] - H)] <- NA
+  y[x > (qnt[2] + H)] <- NA
+  y
+}
+
+dat$DemC1 = remove_outliers(dat$DemC1)
 
 
 # Find the waves that have data for a given measure---------------------------------------------------------
 findWaves <- function(measure){
   
   # Gets the rows of data for given measure
-  rows <- data_dictionary[data_dictionary$Measure %in% measure,]
-  rows <- subset(data_dictionary, Measure %in% measure)
-  
+  rows <- subset(response_rows, Request_Label %in% measure)
   
   wave_cols <- rows %>% select(starts_with("wave"))
   wave_exist <- vector()
@@ -30,13 +64,10 @@ findWaves <- function(measure){
   for(col in wave_cols){
     for (row in col){
       if (is.na(row)){}
-      
       else{
         wave_exist[i] <- colnames(wave_cols[i])
       }
-      
     }
-    
     i <- i + 1
   }  
   
@@ -54,36 +85,10 @@ findWaves <- function(measure){
 grabQuestions <- function(measure){
   
   # Gets the rows of data for given measure
-  rows <- data_dictionary[data_dictionary$Measure %in% measure,]
-  rows <- subset(data_dictionary, Measure %in% measure)
-  questions <- vector()
-
-  for(i in 1:nrow(rows)){
-    questions[i] <- rows[i,4]
-  }
-    
-  return(questions)
+  rows <- response_rows[(response_rows$Request_Label == measure),]
+  #rows <- subset(data_dictionary, Measure %in% measure)
+  return(rows$ElementDescription)
 }
-
-
-# Create measure/wave/question tibble
-
-generateQ_Wave_Map <- function(){
-  
-  waves <- list()
-  questions <- list()
-  for(i in 1:length(measures)){
-    temp <- measures[i]
-    wave <- findWaves(temp)
-    waves[i] <- list(wave)
-    qs <- grabQuestions(temp)
-    questions[i] <- list(qs)
-  }
-  
-  question_wave_map <- tibble(measure=labels, wave=waves, questions= questions)
-  return(question_wave_map)
-}
-
 
 # Retrieve Text ---------------------------------------------------------------------------------------------
 get_text <- function(dat, data_dictionary, variable){
@@ -107,4 +112,4 @@ get_text <- function(dat, data_dictionary, variable){
   return(out)
 }
 
-
+# Plot raw data
