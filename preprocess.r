@@ -6,6 +6,20 @@ library(Dict)
 dat = tibble(read.csv('Wave1-8_A-E.csv'))
 request_lookup = read_excel('Combined_Request_Lookup.xlsx', skip=1)
 data_dictionary = read_excel('Combined_Data_Dictionary.xlsx', skip=1)
+demo_survey = read_excel('Comparison of Demographic Surveys.xlsx', skip=1)
+
+
+# Generate demographic categories
+demo_data <- demo_survey[1:44,]
+values <- c('Likert', 'Likert', 'Numeric Factor', 'Categorical Factor', 'Binary',
+            'Numeric Factor', NA, 'Categorical Factor', 'Y/N/O', 'Categorical Factor',
+            'Binary', 'Binary', 'Categorical Factor', 'Numeric Factor', 'Numeric Factor',
+            'Binary', 'Categorical Factor', 'Y/N/O', 'Numeric Factor', 'Y/N/O', 'Categorical Factor',
+            'Y/N/O', 'Categorical Factor', 'Categorical Factor', 'Categorical Factor', 
+            'Categorical Factor', 'Likert')
+
+val_types <- tibble(values, unique(demo_data$Text))
+
 
 # Processing data dictionary tracking
 dict_tracking = read_excel('COVID_Data_Dictionaries_tracking.xlsx')
@@ -14,12 +28,14 @@ dict_tracking = dict_tracking[!is.na(dict_tracking$Request_Label),]
 
 dummy_waves <- colnames(data_dictionary %>% select(8:22))
 
+
 ## Main preprocessing step:
 # Get unique_request_labels
 response_rows= request_lookup[(request_lookup$Scores==0) & (request_lookup$DataType=='integer'),]
 measures = unique(response_rows$Request_Label)
 demographics = measures[startsWith(measures, 'Dem')]
 measures = measures[!startsWith(measures, 'Dem')]
+demographic_varnames <- response_rows[startsWith(response_rows$unified_variable_names, 'Dem'),]$ElementDescription
 
 # Generate select categories
 cats = character()
@@ -48,7 +64,6 @@ remove_outliers <- function(x, na.rm = TRUE, ...) {
   y
 }
 
-dat$DemC1 = remove_outliers(dat$DemC1)
 
 
 # Find the waves that have data for a given measure---------------------------------------------------------
